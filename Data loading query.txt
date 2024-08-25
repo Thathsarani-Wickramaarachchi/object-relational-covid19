@@ -1,0 +1,397 @@
+-----object relational schema-----
+
+create type country_type as object(
+cid number(4),
+cname varchar2(50),
+cstate varchar2(50),
+latitude number(8,4),
+longitude number(8,4)
+)
+/
+
+create type record_type as object(
+rid number(6),
+cid REF country_type,
+rdate DATE,
+confirmed_count number(6),
+death_count number(6),
+recovered_count number(6)
+)
+/
+
+create table country_table of country_type(
+cid primary key
+)
+/
+
+
+create table record_table of record_type(
+rid primary key,
+cid NOT NULL references country_table
+)
+/
+
+----auto increment-----
+
+CREATE SEQUENCE sequence1
+START WITH 1
+INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER country_trigger
+BEFORE INSERT
+ON country_table 
+REFERENCING NEW AS NEW
+FOR EACH ROW
+BEGIN
+SELECT sequence1.nextval INTO :NEW.CID FROM dual;
+END;
+/
+
+CREATE SEQUENCE sequence2
+START WITH 1
+INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER record_trigger
+BEFORE INSERT
+ON record_table 
+REFERENCING NEW AS NEW
+FOR EACH ROW
+BEGIN
+SELECT sequence2.nextval INTO :NEW.RID FROM dual;
+END;
+/
+
+
+-----------gate dates from table and store in csv file----------
+
+DECLARE
+      F UTL_FILE.FILE_TYPE;
+      WF UTL_FILE.FILE_TYPE;
+      V_LINE VARCHAR2(1000);
+      V_date VARCHAR2(50);
+      
+     
+	i number(5);
+    BEGIN
+      F := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\confirmed.CSV', 'R');
+      WF := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\dates.CSV', 'W');
+	
+    IF UTL_FILE.IS_OPEN(F) THEN
+      LOOP
+        BEGIN
+      	
+	  UTL_FILE.GET_LINE(F, V_LINE, 1000);
+          IF V_LINE IS NULL THEN
+            EXIT;
+          END IF;
+	  i :=5;
+		LOOP
+			BEGIN
+			  
+	 		  V_date := replace(REGEXP_SUBSTR(V_LINE, '("([^"]*)")|[^,]+', 1, i),'"','');
+			  UTL_FILE.PUT_LINE(WF,V_date);
+       			  
+			  COMMIT;
+			  i:=i+1;
+			  IF V_date IS NULL THEN
+				EXIT;
+			  END IF;
+			END;
+		END LOOP;
+		EXIT;
+          
+        EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          EXIT;
+        END;
+      END LOOP;
+    END IF;
+    UTL_FILE.FCLOSE(WF);
+    UTL_FILE.FCLOSE(F);
+  END;
+/
+______________________METHOD TO INSERT DATA TO CONTRY TABLE_______________________
+DECLARE
+      FILE UTL_FILE.FILE_TYPE;
+      V_LINE_C VARCHAR2 (2000);
+	V_name VARCHAR2(50);
+      V_state VARCHAR2(50);
+      V_lat NUMBER(8,4);
+      V_long NUMBER(8,4);
+     
+     
+	i number(5);
+
+    BEGIN
+	
+      FILE := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\confirmed.CSV', 'R');
+	i:=0;
+
+	
+    IF UTL_FILE.IS_OPEN(FILE) THEN
+      LOOP
+        BEGIN
+	  i:=i+1;
+	  UTL_FILE.GET_LINE(FILE, V_LINE_C, 2000);
+	  IF i =1 THEN
+		CONTINUE;
+	  END IF;	  
+          IF V_LINE_C IS NULL THEN		
+            EXIT;
+          END IF;
+		
+	  V_state := replace(REGEXP_SUBSTR(V_LINE_C, '("([^"]*)")|[^,]+', 1, 1),'"','');
+          V_name := REGEXP_SUBSTR(V_LINE_C, '("([^"]*)")|[^,]+', 1, 2);
+          V_lat := REGEXP_SUBSTR(V_LINE_C, '("([^"]*)")|[^,]+', 1, 3);
+          V_long := REGEXP_SUBSTR(V_LINE_C, '("([^"]*)")|[^,]+', 1, 4);
+          INSERT INTO country_table VALUES(country_type(0, V_name ,V_state , V_lat , V_long));
+          COMMIT;
+
+	EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          EXIT;
+        END;
+      END LOOP;
+    END IF;
+    
+    UTL_FILE.FCLOSE(FILE);
+  END;
+/
+
+
+
+
+ALTER SESSION SET NLS_DATE_FORMAT = 'MM/DD/YYYY';
+
+
+
+Methord to insert other data to records table
+--------------------------------------------------------------
+DECLARE
+      F1 UTL_FILE.FILE_TYPE;
+      F2 UTL_FILE.FILE_TYPE;
+      F3 UTL_FILE.FILE_TYPE;
+      WF UTL_FILE.FILE_TYPE;
+      V_LINE_C VARCHAR2 (2000);
+      V_LINE_D VARCHAR2 (2000);
+      V_LINE_R VARCHAR2 (2000);
+      V_LINE2 VARCHAR2 (2000);
+      V_date VARCHAR2(50);
+      V_confirmed NUMBER(7);
+      V_deaths NUMBER(7);
+      V_recoverd NUMBER(7);
+     
+	i number(5);
+	row number(5);
+    BEGIN
+	
+      F1 := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\confirmed.CSV', 'R');
+      F2 := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\deaths.CSV', 'R');
+      F3 := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\recovered.CSV', 'R');
+
+     
+	i:=0;
+	row:=0;
+
+	
+    IF UTL_FILE.IS_OPEN(F1) AND UTL_FILE.IS_OPEN(F2) AND UTL_FILE.IS_OPEN(F3) THEN
+      LOOP
+        BEGIN
+	  i:=i+1;
+	  UTL_FILE.GET_LINE(F1, V_LINE_C, 2000);
+	  UTL_FILE.GET_LINE(F2, V_LINE_D, 2000);
+	  UTL_FILE.GET_LINE(F3, V_LINE_R, 2000);
+	  IF i =1 THEN
+		CONTINUE;
+	  END IF;
+	  
+          IF V_LINE_C IS NULL THEN		
+		
+            EXIT;
+          END IF;
+	  i :=5;
+		
+		row :=row+1;
+      	    WF := UTL_FILE.FOPEN ('NEW_DIR', 'D:\IT18054378\dates.CSV', 'R');
+	    IF UTL_FILE.IS_OPEN(WF) THEN
+		
+		
+		LOOP
+		 BEGIN
+		     UTL_FILE.GET_LINE(WF, V_LINE2, 100);
+		   IF V_LINE2 IS NULL THEN
+			UTL_FILE.FCLOSE(WF);
+			EXIT;
+			END IF;
+	 		V_date := REGEXP_SUBSTR(V_LINE2, '("([^"]*)")|[^,]+', 1, 1);
+			V_confirmed := REGEXP_SUBSTR(V_LINE_C, '("([^"]*)")|[^,]+', 1, i);
+			V_deaths := REGEXP_SUBSTR(V_LINE_D, '("([^"]*)")|[^,]+', 1, i);
+			V_recoverd := REGEXP_SUBSTR(V_LINE_R, '("([^"]*)")|[^,]+', 1, i);
+			 			  
+       			INSERT INTO record_table values(record_type(0,(select ref(t) from country_table t 
+				where t.cid=row),V_date , V_confirmed,V_deaths ,V_recoverd )); 
+			COMMIT;
+			 i:=i+1;
+			  
+		
+		END;	
+		END LOOP;
+
+	     END IF;
+	 
+
+	EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          EXIT;
+        END;
+      END LOOP;
+    END IF;
+	IF UTL_FILE.is_open(WF) THEN
+	UTL_FILE.fclose(WF);
+  	END IF;
+
+    
+    UTL_FILE.FCLOSE(F1);
+    UTL_FILE.FCLOSE(F2);
+    UTL_FILE.FCLOSE(F3);
+  END;
+/
+ 
+-----Member methods-----
+
+ALTER TYPE RECORD_TYPE
+ADD MEMBER FUNCTION getActivePatientCount RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+ADD MEMBER FUNCTION getActivePatientRate RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+ADD MEMBER FUNCTION getDeathRate RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+ADD MEMBER FUNCTION getRecoveryRate RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+ADD MEMBER FUNCTION compareDeathsvsRecoveries RETURN VARCHAR2 CASCADE
+/
+
+
+CREATE OR REPLACE TYPE BODY record_type AS
+MEMBER FUNCTION getActivePatientCount
+RETURN NUMBER IS pcount NUMBER; 
+  BEGIN
+     pcount:=(SELF.confirmed_count - 
+	(SELF.death_count + SELF.recovered_count)); 
+     RETURN pcount;  
+  END getActivePatientCount;
+
+MEMBER FUNCTION getActivePatientRate
+RETURN NUMBER IS pRate NUMBER;
+autoNo NUMBER;
+  BEGIN
+	IF SELF.confirmed_count > 0 THEN 
+	autoNo:=SELF.confirmed_count;
+	ELSE autoNo:=1;
+	END IF;
+   pRate:=((SELF.confirmed_count - 
+	(SELF.death_count + SELF.recovered_count))/autoNo)*100;
+   RETURN pRate;
+  END getActivePatientRate;
+
+MEMBER FUNCTION getDeathRate
+RETURN NUMBER IS dRate NUMBER;
+autoNo NUMBER;
+  BEGIN
+	IF SELF.confirmed_count > 0 THEN 
+	autoNo:=SELF.confirmed_count;
+	ELSE autoNo:=1;
+	END IF;
+    dRate:=(SELF.death_count/autoNo)*100;
+    RETURN dRate;
+  END getDeathRate;
+
+
+MEMBER FUNCTION getRecoveryRate
+RETURN NUMBER IS rRate NUMBER;
+autoNo NUMBER;
+  BEGIN
+	IF SELF.confirmed_count > 0 THEN 
+	autoNo:=SELF.confirmed_count;
+	ELSE autoNo:=1;
+	END IF;
+   rRate:=(SELF.recovered_count/autoNo)*100;
+   RETURN rRate;
+  END getRecoveryRate;
+END;
+/
+
+MEMBER FUNCTION compareDeathsvsRecoveries
+RETURN VARCHAR2 IS 
+  BEGIN
+	IF SELF.recovered_count > SELF.death_count
+	THEN RETURN 'Recoveries > Deaths';
+	ELSIF SELF.recovered_count < SELF.death_count
+	THEN RETURN 'Deaths > Recoveries';
+	ELSE RETURN 'Deaths = Recoveries';
+	END IF;
+   END compareDeathsvsRecoveries;
+
+
+ALTER TYPE RECORD_TYPE
+DROP MEMBER FUNCTION getActivePatientCount RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+DROP MEMBER FUNCTION getActivePatientRate RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+DROP MEMBER FUNCTION getDeathRate RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+DROP MEMBER FUNCTION getRecoveryRate RETURN NUMBER CASCADE
+/
+
+ALTER TYPE RECORD_TYPE
+DROP MEMBER FUNCTION compareDeathsvsRecoveries RETURN VARCHAR2 CASCADE
+/
+
+-------reprts------
+
+select r.cid.cname, r.cid.cstate, SUM(r.getActivePatientCount()) TotalPatients
+from record_table r
+group by r.cid,r.cid.cname,r.cid.cstate
+order by AvgPatients DESC
+
+select r.cid.cname, r.cid.cstate, AVG(r.getDeathRate()) AverageDeathRate
+from record_table r
+group by r.cid,r.cid.cname,r.cid.cstate
+order by AverageDeathRate DESC
+
+select r.cid.cname, r.cid.cstate, AVG(r.getRecoveryRate()) AverageRecoveryRate
+from record_table r
+group by r.cid,r.cid.cname,r.cid.cstate
+order by AverageDeathRate DESC
+
+select r.cid.cname, SUM(r.getActivePatientCount()) avgPatients
+from record_table r
+group by r.cid.cname
+having SUM(r.getActivePatientCount()) >= ( select SUM(r1.getActivePatientCount()) from record_table r1
+where r1.cid.cname = 'China')
+
+select r.cid.cname,r.compareDeathsvsRecoveries()
+from record_table r
+group by r.cid.cname,r.compareDeathsvsRecoveries()
+
+select r.cid.cname, r.rdate, AVG(r.getRecoveryRate())
+from record_table r
+group by r.cid.cname,r.rdate
+ORder by r.cid.cname ASC
+/
+
+
